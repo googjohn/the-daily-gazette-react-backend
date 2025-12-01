@@ -1,2 +1,12 @@
-.vercel
+.vercel/
+.venv/
 venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.DS_Store
+.env*
+
+.vercel
