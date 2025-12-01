@@ -1,5 +1,7 @@
-def handler(request):
-  print(request)
-  return {
-    'message': 'hello python'
-  }
+from fastapi import FastAPI
+ 
+app = FastAPI()
+ 
+@app.get("/")
+def read_root():
+    return {"Python": "on Vercel"}
