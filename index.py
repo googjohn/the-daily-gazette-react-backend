@@ -15,6 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.options("/{path:path}")
+def options_handler():
+    return {"ok": True}
+
 @app.get("/api")
 def read_root():
     return {"Python": "on Vercel"}
