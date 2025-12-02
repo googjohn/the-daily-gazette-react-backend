@@ -294,7 +294,7 @@ def get_schedules(response: Response):
             })
         # sort using the date
         schedules.sort(key=lambda x: x["date"])
-        print(schedules)
+        
         return {
             "ok": True,
             "error": None,
