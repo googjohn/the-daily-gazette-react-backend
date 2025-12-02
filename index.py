@@ -10,14 +10,14 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://the-daily-gazette-react.vercel.app"],
+    allow_origins=[
+        "https://the-daily-gazette-react.vercel.app", 
+        "http://localhost:5173",
+        "http://localhost:3000"
+        ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.options("/{path:path}")
-def options_handler():
-    return {"ok": True}
 
 @app.get("/api")
 def read_root():
