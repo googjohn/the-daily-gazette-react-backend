@@ -31,11 +31,14 @@ def get_schedules(response: Response):
     response.headers["Cache-Control"] = "public, s-maxage=31536000"
     try:
         season = datetime.now().year + 1
-        url = f'{sportsdata_url}/SchedulesBasic/{season}'
+        urlTeams = f"{sportsdata_url}/teams/{season}"
+        urlSchedules = f'{sportsdata_url}/SchedulesBasic/{season}'
         headers = {
             "Ocp-Apim-Subscription-Key": sportsdata_apikey
         }
-        result = requests.get(url, headers=headers).json()
+
+        teams = requests.get(urlTeams, headers=headers).json()
+        result = requests.get(urlSchedules, headers=headers).json()
         
         games = []
         for game in result:
@@ -44,14 +47,24 @@ def get_schedules(response: Response):
                 "gameDate": game.get('Day'),
                 "gameStatus": game.get('Status'),
                 "gameLabel": game.get('gameLabel') or None,
-                "homeTeam_name": game.get('HomeTeam'),
+                "homeTeam_key": game.get('HomeTeam'),
                 "homeTeam_id": game.get('HomeTeamID'),
-                "awayTeam_name": game.get('AwayTeam'),
+                "awayTeam_key": game.get('AwayTeam'),
                 "awayTeam_id": game.get('AwayTeamID'),
                 "homeTeam_score": game.get('HomeTeamScore'),
                 "awayTeam_score": game.get('AwayTeamScore'),
                 "gameTimeUTC": game.get('DateTimeUTC')
             }
+            for t in teams:
+                if game.get("HomeTeamID") == t.get("TeamID"):
+                    filtered_game["homeTeam_name"] = t.get("Name")
+                    filtered_game["homeTeam_city"] = t.get("City")
+                    filtered_game["homeTeam_logo"] = t.get("WikipediaLogoUrl")
+                elif game.get("AwayTeamID") == t.get("TeamID"):
+                    filtered_game["awayTeam_name"] = t.get("Name")
+                    filtered_game["awayTeam_city"] = t.get("City")
+                    filtered_game["awayTeam_logo"] = t.get("WikipediaLogoUrl")
+
             games.append(filtered_game)
         
         schedules = []
@@ -180,7 +193,7 @@ def get_players(response: Response):
 
         for player in players_list:
             for team in teams:
-                if team.get("Key") == player.get("team_key"):
+                if team.get("TeamID") == player.get("team_id"):
                     player["team_name"] = team.get('Name')
                     player["team_city"] = team.get('City')
                     player["team_logo"] = team.get('WikipediaLogoUrl')
@@ -237,8 +250,8 @@ def get_schedules(response: Response):
             enddate = datetime.now().date() + timedelta(days=10)
             mlb_schedule = mlb.get_schedule(start_date=startdate, end_date=enddate)
 
-        # mlb_teams = mlb.get_teams(sport_id=1)
-
+        mlb_teams = mlb.get_teams(sport_id=1)
+        
         schedules = []
         # create an array of games per date
         for date in mlb_schedule.dates:
@@ -249,6 +262,7 @@ def get_schedules(response: Response):
                 filtered_game = {
                     "gameId": game.gameguid,
                     "gameDate": game.gamedate,
+                    "gameTimeUTC": game.gamedate,
                     "gamepk": game.gamepk,
                     "gameStatus": game.status.detailedstate,
                     "gameLabel": game.seriesdescription,
@@ -261,6 +275,17 @@ def get_schedules(response: Response):
                     "homeTeam_seriesRecord": game.teams.home.leaguerecord,
                     "awayTeam_seriesRecord": game.teams.away.leaguerecord
                 }
+                for team in mlb_teams:
+                    
+                    if team.id == game.teams.home.team.id:
+                        filtered_game["homeTeam_key"] = team.abbreviation
+                        filtered_game["homeTeam_city"] = team.locationname
+                        filtered_game["homeTeam_clubname"] = team.clubname
+                    elif team.id == game.teams.away.team.id:
+                        filtered_game["awayTeam_key"] = team.abbreviation
+                        filtered_game["awayTeam_city"] = team.locationname
+                        filtered_game["awayTeam_clubname"] = team.clubname
+
                 game_list.append(filtered_game)
 
             schedules.append({
@@ -269,7 +294,7 @@ def get_schedules(response: Response):
             })
         # sort using the date
         schedules.sort(key=lambda x: x["date"])
-        
+        print(schedules)
         return {
             "ok": True,
             "error": None,
@@ -302,19 +327,22 @@ def get_standings(response: Response):
         }
 
         for team in mlb_teams: 
+            
             league_name = team.league.name
             league_id = team.league.id
             division_name = team.division.name
             division_id = team.division.id
 
             filtered_team = {
+                "team_id": team.id,
                 "team_name": team.name,
+                "team_key": team.abbreviation,
+                "team_clubname": team.clubname,
+                "team_city": team.locationname,
                 "league_name": league_name,
                 "league_id": league_id,
                 "division_name": division_name,
                 "division_id": division_id,
-                "club_name": team.clubname,
-                "team_id": team.id,
                 "season": team.season,
             }
 
@@ -398,25 +426,23 @@ def get_players(response: Response):
                     if p.id == list[i]["id"]:
                         team_id = p.currentteam["id"]
                         break
-                    
-                team_name = None
-                team_clubname = None
-                # get player team name/clubname
-                for team in teams_list:
-                    if team_id == team.id:
-                        team_clubname = team.clubname
-                        team_name = team.name
-                        break
+
                 filtered_player_data = {
                     "player_name": list[i]["fullName"],
                     "player_id": list[i]["id"],
                     "player_position": list[i]["primaryPosition"]["name"],
                     "player_batside": list[i]["batSide"],
                     "player_pitchhand": list[i]["pitchHand"],
-                    "team_name": team_name,
-                    "team_clubname": team_clubname,
-                    "team_id": team_id,
                 }
+                # get player team name/clubname
+                for team in teams_list:
+                    if team_id == team.id:
+                        filtered_player_data["team_clubname"] = team.clubname
+                        filtered_player_data["team_city"] = team.locationname
+                        filtered_player_data["team_name"] = team.name
+                        filtered_player_data["team_id"] = team.id
+                        filtered_player_data["team_key"] = team.abbreviation
+                        break
 
                 result.append(filtered_player_data)
 
@@ -481,26 +507,30 @@ def get_schedules(response: Response):
         for match in result["matches"]:
             label = match.get('stage').split('_')
             label = " ".join(label).title()
-            date = match.get("utcDate").split('T')[0]
-            timeUTC = match.get("utcDate").split('T')[1][0:-1]
+            gamestatus = match.get("status").title()
 
             filtered_game_data = {
                 "gameId": match.get("id"),
-                "gameDate": date,
-                "gameStatus": match.get("status"),
+                "gameDate": match.get("utcDate"),
+                "gameStatus": gamestatus,
                 "gameLabel": label,
-                "homeTeam_name": match.get("homeTeam")["shortName"],
+                "homeTeam_name": match.get("homeTeam")["name"],
+                "homeTeam_key": match.get("homeTeam")["tla"],
+                "homeTeam_clubname": match.get("homeTeam")["shortName"],
                 "homeTeam_id": match.get("homeTeam")["id"],
-                "homeTeam_crest": match.get("homeTeam")["crest"],
+                "homeTeam_logo": match.get("homeTeam")["crest"],
                 "homeTeam_score": match.get("score")["fullTime"]["home"],
-                "awayTeam_name": match.get("awayTeam")["shortName"],
+                "awayTeam_name": match.get("awayTeam")["name"],
+                "awayTeam_clubname": match.get("awayTeam")["shortName"],
+                "awayTeam_key": match.get("awayTeam")["tla"],
                 "awayTeam_id": match.get("awayTeam")["id"],
-                "awayTeam_crest": match.get("awayTeam")["crest"],
+                "awayTeam_logo": match.get("awayTeam")["crest"],
                 "awayTeam_score": match.get("score")["fullTime"]["away"],
-                "gameTimeUTC": timeUTC,
+                "gameTimeUTC": match.get("utcDate"),
             }
             
             games_list.append(filtered_game_data)
+
         for date, group_games in groupby(games_list, key=lambda x: x["gameDate"]):
             schedules.append({
                 "date": date,
@@ -542,9 +572,11 @@ def get_standings(response: Response):
         for team in result["standings"][0]["table"]:
             filtered_team_data = {
                 "team_name": team.get("team")["name"],
+                "team_key": team.get("team")["tla"],
                 "team_clubname": team.get("team")["shortName"],
                 "team_id": team.get("team")["id"],
-                "team_crest": team.get("team")["crest"],
+                "team_logo": team.get("team")["crest"],
+                "played_games": team.get("playedGames"),
                 "ties": team.get("draw"),
                 "wins": team.get("won"),
                 "losses": team.get("lost"),
@@ -557,7 +589,7 @@ def get_standings(response: Response):
                 "goals_against": team.get('goalsAgainst'),
                 "league_name": result['competition']["name"],
                 "league_id": result['competition']["id"],
-                "league_crest": result['competition']["emblem"],
+                "league_logo": result['competition']["emblem"],
                 "season": result['filters']["season"]
             }
             standings_list.append(filtered_team_data)
@@ -603,9 +635,10 @@ def get_players(response: Response):
                 "player_id": p["player"].get("id"),
                 "player_position": p["player"].get("section"),
                 "team_name": p["team"].get("name"),
+                "team_key": p["team"].get("tla"),
                 "team_clubname": p["team"].get("shortName"),
                 "team_id": p["team"].get("id"),
-                "team_crest": p["team"].get("crest")
+                "team_logo": p["team"].get("crest")
             }
             playerlist.append(filtered_player_data)
 
