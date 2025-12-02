@@ -505,13 +505,14 @@ def get_schedules(response: Response):
         schedules = []
         games_list = []
         for match in result["matches"]:
+            gamedate = match.get("utcDate").split('T')[0]
             label = match.get('stage').split('_')
             label = " ".join(label).title()
             gamestatus = match.get("status").title()
 
             filtered_game_data = {
                 "gameId": match.get("id"),
-                "gameDate": match.get("utcDate"),
+                "gameDate": gamedate,
                 "gameStatus": gamestatus,
                 "gameLabel": label,
                 "homeTeam_name": match.get("homeTeam")["name"],
