@@ -24,7 +24,7 @@ sportsdata_url = os.getenv("SPORTSDATA_URL")
 sportsdata_apikey = os.getenv("SPORTSDATA_APIKEY")
 @app.get("/api/NBA/schedules")
 def get_schedules(response: Response):
-    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
     try:
         season = datetime.now().year + 1
         urlTeams = f"{sportsdata_url}/teams/{season}"
@@ -86,7 +86,7 @@ def get_schedules(response: Response):
 
 @app.get("/api/NBA/standings")
 def get_standings(response: Response):
-    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
     try:
         season = datetime.now().year + 1
         urlTeams = f"{sportsdata_url}/teams/{season}"
@@ -145,7 +145,7 @@ def get_standings(response: Response):
     
 @app.get("/api/NBA/players")
 def get_players(response: Response):
-    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
     try:
         season = datetime.now().year + 1
         urlTeams = f"{sportsdata_url}/teams/{season}"
@@ -211,7 +211,7 @@ def get_players(response: Response):
 # get mlb data
 @app.get("/api/MLB/schedules")
 def get_schedules(response: Response):
-    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
     try:
         current_date = datetime.now().date()
         current_year_season = datetime.now().year
@@ -307,7 +307,7 @@ def get_schedules(response: Response):
 
 @app.get('/api/MLB/standings')
 def get_standings(response: Response):
-    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
     try:
         current_year = datetime.now().year
         mlb = mlbstatsapi.Mlb()
@@ -394,7 +394,7 @@ def get_standings(response: Response):
     
 @app.get('/api/MLB/players')
 def get_players(response: Response):
-    response.headers["Cache-Control"] = 'no-cache, must-revalidate'
+    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
     try:
         current_date = datetime.now().date()
         current_year_season = datetime.now().year
@@ -483,7 +483,7 @@ FOOTBALL_DATA_URL = os.getenv("FOOTBALL_DATA_URL")
 FOOTBALL_DATA_APIKEY = os.getenv("FOOTBALL_DATA_APIKEY")
 @app.get('/api/SOCCER/schedules')
 def get_schedules(response: Response):
-    response.headers["Cache-Control"] = 'no-cache, must-revalidate'
+    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
     try:
         current_year = datetime.now().year
         PL_ID = 2021
@@ -549,7 +549,7 @@ def get_schedules(response: Response):
 
 @app.get('/api/SOCCER/standings')
 def get_standings(response: Response):
-    response.headers["Cache-Control"] = 'no-cache, must-revalidate'
+    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
     try:
         current_year = datetime.now().year
         PL_ID = 2021
@@ -607,7 +607,7 @@ def get_standings(response: Response):
 
 @app.get('/api/SOCCER/players')
 def get_players(response: Response):
-    response.headers["Cache-Control"] = 'no-cache, must-revalidate'
+    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
     try:
         current_year=datetime.now().year
         # pre-selected league/competition. later, implement a selectable dropdown for different competitions
