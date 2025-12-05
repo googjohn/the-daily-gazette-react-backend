@@ -1,6 +1,8 @@
 import os
-import requests
 import mlbstatsapi
+import requests
+from requests.exceptions import HTTPError, ConnectionError 
+from mlbstatsapi.exceptions import TheMlbStatsApiException
 from itertools import groupby
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +26,9 @@ sportsdata_url = os.getenv("SPORTSDATA_URL")
 sportsdata_apikey = os.getenv("SPORTSDATA_APIKEY")
 @app.get("/api/NBA/schedules")
 def get_schedules(response: Response):
-    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+
     try:
         season = datetime.now().year + 1
         urlTeams = f"{sportsdata_url}/teams/{season}"
@@ -33,11 +37,17 @@ def get_schedules(response: Response):
             "Ocp-Apim-Subscription-Key": sportsdata_apikey
         }
 
-        teams = requests.get(urlTeams, headers=headers).json()
-        result = requests.get(urlSchedules, headers=headers).json()
-        
+        result_teams = requests.get(urlTeams, headers=headers)
+        result_teams.raise_for_status()
+
+        result_shcedules = requests.get(urlSchedules, headers=headers)
+        result_shcedules.raise_for_status()
+
+        teams = result_teams.json()
+        schedules_list = result_shcedules.json()
+
         games = []
-        for game in result:
+        for game in schedules_list:
             filtered_game = {
                 "gameId": game.get('GameID'),
                 "gameDate": game.get('Day'),
@@ -70,23 +80,42 @@ def get_schedules(response: Response):
                 "gamesList": list(games_group)
             })
 
+         # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": schedules
         }
 
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
 
 @app.get("/api/NBA/standings")
 def get_standings(response: Response):
-    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+
     try:
         season = datetime.now().year + 1
         urlTeams = f"{sportsdata_url}/teams/{season}"
@@ -95,11 +124,17 @@ def get_standings(response: Response):
             "Ocp-Apim-Subscription-Key": sportsdata_apikey
         }
 
-        teams = requests.get(urlTeams, headers=headers).json()
-        result = requests.get(urlStandings, headers=headers).json()
+        result_teams = requests.get(urlTeams, headers=headers)
+        result_teams.raise_for_status()
+
+        result_standings = requests.get(urlStandings, headers=headers)
+        result_standings.raise_for_status()
+
+        teams = result_teams.json()
+        standings = result_standings.json()
 
         grouped = { 'east': [], 'west': []}
-        for team in result:
+        for team in standings:
             conference = team.get("Conference").lower()
             filtered_team_records = {
                 "team_id": team.get('TeamID'),
@@ -129,23 +164,42 @@ def get_standings(response: Response):
         grouped["east"] = sorted(grouped["east"], key=lambda x: x["winpct"], reverse=True)
         grouped["west"] = sorted(grouped["west"], key=lambda x: x["winpct"], reverse=True)
 
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error":None,
             "data": grouped
         }
 
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
     
 @app.get("/api/NBA/players")
 def get_players(response: Response):
-    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+
     try:
         season = datetime.now().year + 1
         urlTeams = f"{sportsdata_url}/teams/{season}"
@@ -154,8 +208,14 @@ def get_players(response: Response):
             "Ocp-Apim-Subscription-Key": sportsdata_apikey
         }
 
-        teams = requests.get(urlTeams, headers=headers).json()
-        playersStats = requests.get(urlPlayersStats, headers=headers).json()
+        result_teams = requests.get(urlTeams, headers=headers)
+        result_teams.raise_for_status()
+
+        result_players_stats = requests.get(urlPlayersStats, headers=headers)
+        result_players_stats.raise_for_status()
+
+        teams = result_teams.json()
+        playersStats = result_players_stats.json()
 
         players_list = []
         for player in playersStats:
@@ -194,24 +254,43 @@ def get_players(response: Response):
                     player["team_city"] = team.get('City')
                     player["team_logo"] = team.get('WikipediaLogoUrl')
 
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": players_list,
         }
     
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
 
 # get mlb data
 @app.get("/api/MLB/schedules")
 def get_schedules(response: Response):
-    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+
     try:
         current_date = datetime.now().date()
         current_year_season = datetime.now().year
@@ -291,23 +370,28 @@ def get_schedules(response: Response):
         # sort using the date
         schedules.sort(key=lambda x: x["date"])
         
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": schedules
         }
     
-    except Exception as e:
-        response.status_code = 500
+    except TheMlbStatsApiException as err:
+        response.status_code = 502
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": str(err)
         }
 
 @app.get('/api/MLB/standings')
 def get_standings(response: Response):
-    response.headers["Cache-Control"] = "public, s-maxage=3600, stale-while-revalidate=3600"
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+
     try:
         current_year = datetime.now().year
         mlb = mlbstatsapi.Mlb()
@@ -378,40 +462,68 @@ def get_standings(response: Response):
         mlb_leagues_standings["american_league"].sort(key=lambda x: int(x["league_rank"]))
         mlb_leagues_standings["national_league"].sort(key=lambda x: int(x["league_rank"]))
         
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": mlb_leagues_standings
         }
 
-    except Exception as e:
-        response.status_code = 500
+    except TheMlbStatsApiException as err:
+        response.status_code = 502
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": str(err)
         }
     
 @app.get('/api/MLB/players')
 def get_players(response: Response):
-    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
+    response.headers["Cache-Control"] = 'no-cache, no-store, must-revalidate'
+
+    # final holder of the response
+    playerlist = []
+
+    # holder for players list from mlb api wrapper
+    players_list = None
+    # holder for teams list from mlb api wrapper
+    teams_list = None
+
+    # first try catch for data from api wrapper
+    try:
+        mlb = mlbstatsapi.Mlb()
+        players_list = mlb.get_people(sport_id=1,season=current_year_season)
+        teams_list = mlb.get_teams(sport_id=1,season=current_year_season)
+
+    except TheMlbStatsApiException as err:
+        response.status_code = 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": str(err)
+        }
+
+    # second try catch for data not provided by the api wrapper
     try:
         current_date = datetime.now().date()
         current_year_season = datetime.now().year
         next_year_season = current_year_season + 1
 
-        mlb = mlbstatsapi.Mlb()
-        # fetch players to query for player team
-        players_list = mlb.get_people(sport_id=1,season=current_year_season)
-        # fetch team for player team and team id
-        teams_list = mlb.get_teams(sport_id=1,season=current_year_season)
-
         # players = statsapi.league_leaders(leaderCategories='avg',statGroup='hitting',limit=30)
         # mlbstatsapi doesn't provide allstar endpoints. need to create own request using the base url
         url_al = f"https://statsapi.mlb.com/api/v1/league/103/allStarFinalVote?season={current_year_season}"
         url_nl = f"https://statsapi.mlb.com/api/v1/league/104/allStarFinalVote?season={current_year_season}"
-        allstar_al = requests.get(url_al).json()
-        allstar_nl = requests.get(url_nl).json()
+        
+        al_result = requests.get(url_al)
+        al_result.raise_for_status()
+
+        nl_result = requests.get(url_nl)
+        nl_result.raise_for_status()
+
+        allstar_al = al_result.json()
+        allstar_nl = nl_result.json()
         
         def create_allstar_list(list):
             result = []
@@ -449,10 +561,9 @@ def get_players(response: Response):
         result_nl = create_allstar_list(allstar_nl_list)
         result_al = create_allstar_list(allstar_al_list)
 
-        playerlist = []
         result_nl_copy = result_nl.copy()
         result_al_copy = result_al.copy()
-        for i in range(34):
+        for i in range(len(result_al) + len(result_nl)):
             if i % 2 == 0:
                 for player in result_nl_copy:
                     playerlist.append(player)
@@ -463,27 +574,46 @@ def get_players(response: Response):
                     playerlist.append(player)
                     result_al_copy.remove(player)
                     break
-                
-        return {
-            "ok": True,
-            "error": None,
-            "data": playerlist
-        }
     
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
+    
+    # cache response for successful request
+    response.headers["Cache-Control"] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=1800'
+    
+    return {
+        "ok": True,
+        "error": None,
+        "data": playerlist
+    }
 
 # soccer data
 FOOTBALL_DATA_URL = os.getenv("FOOTBALL_DATA_URL")
 FOOTBALL_DATA_APIKEY = os.getenv("FOOTBALL_DATA_APIKEY")
 @app.get('/api/SOCCER/schedules')
 def get_schedules(response: Response):
-    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+
     try:
         current_year = datetime.now().year
         PL_ID = 2021
@@ -495,8 +625,9 @@ def get_schedules(response: Response):
             "X-Auth-Token": FOOTBALL_DATA_APIKEY
         }
 
-        result = requests.get(url, headers=headers, params=params)
-        result = result.json()
+        result_schedules = requests.get(url, headers=headers, params=params)
+        result_schedules.raise_for_status()
+        result = result_schedules.json()
         
         schedules = []
         games_list = []
@@ -533,23 +664,43 @@ def get_schedules(response: Response):
                 "date": date,
                 "gamesList": list(group_games)
             })
+        
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": schedules
         }
     
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
 
 @app.get('/api/SOCCER/standings')
 def get_standings(response: Response):
-    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+
     try:
         current_year = datetime.now().year
         PL_ID = 2021
@@ -561,9 +712,10 @@ def get_standings(response: Response):
             "X-Auth-Token": FOOTBALL_DATA_APIKEY
         }
         
-        result = requests.get(url,headers=headers, params=params)
-        result = result.json()
-    
+        result_standings = requests.get(url,headers=headers, params=params)
+        result_standings.raise_for_status()
+        result = result_standings.json()
+        
         standings_list = []
 
         for team in result["standings"][0]["table"]:
@@ -591,23 +743,41 @@ def get_standings(response: Response):
             }
             standings_list.append(filtered_team_data)
 
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=300, s-maxage=3600, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": standings_list
         }
-    
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
 
 @app.get('/api/SOCCER/players')
 def get_players(response: Response):
-    response.headers["Cache-Control"] = 'public, s-maxage=3600, stale-while-revalidate=3600'
+    # don't cache response for failed requests
+    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+
     try:
         current_year=datetime.now().year
         # pre-selected league/competition. later, implement a selectable dropdown for different competitions
@@ -621,8 +791,9 @@ def get_players(response: Response):
             "X-Auth-Token": FOOTBALL_DATA_APIKEY
         }
 
-        result = requests.get(url,headers=headers, params=params)
-        result = result.json()
+        result_players = requests.get(url,headers=headers, params=params)
+        result_players.raise_for_status()
+        result = result_players.json()
         
         playerlist = []
 
@@ -639,16 +810,33 @@ def get_players(response: Response):
             }
             playerlist.append(filtered_player_data)
 
+        # cache response for successful request
+        response.headers["Cache-Control"] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=1800'
+
         return {
             "ok": True,
             "error": None,
             "data": playerlist
         }
     
-    except Exception as e:
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    except Exception as err:
         response.status_code = 500
         return {
             "ok": False,
             "data": None,
-            "error": str(e)
+            "error": f"Internal Server Error: {str(err)}"
         }
