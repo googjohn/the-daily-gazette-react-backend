@@ -491,6 +491,10 @@ def get_players(response: Response):
     # holder for teams list from mlb api wrapper
     teams_list = None
 
+    current_date = datetime.now().date()
+    current_year_season = datetime.now().year
+    next_year_season = current_year_season + 1
+    
     # first try catch for data from api wrapper
     try:
         mlb = mlbstatsapi.Mlb()
@@ -507,10 +511,6 @@ def get_players(response: Response):
 
     # second try catch for data not provided by the api wrapper
     try:
-        current_date = datetime.now().date()
-        current_year_season = datetime.now().year
-        next_year_season = current_year_season + 1
-
         # players = statsapi.league_leaders(leaderCategories='avg',statGroup='hitting',limit=30)
         # mlbstatsapi doesn't provide allstar endpoints. need to create own request using the base url
         url_al = f"https://statsapi.mlb.com/api/v1/league/103/allStarFinalVote?season={current_year_season}"
