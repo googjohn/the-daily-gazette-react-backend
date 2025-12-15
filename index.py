@@ -390,24 +390,27 @@ def get_schedules(response: Response):
 @app.get('/api/MLB/standings')
 def get_standings(response: Response):
     # don't cache response for failed requests
-    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+    response.headers["Cache-Control"] = 'no-cache, no-store, must-revalidate'
 
     try:
         current_year = datetime.now().year
         mlb = mlbstatsapi.Mlb()
         # the result is an instance of mlbstatsapi and not an object/dict
         #  so we have to use dot notation to access properties
-        mlb_standings = mlb.get_standings(league_id="103,104",season=current_year)
-
+        # mlb_standings = mlb.get_standings(league_id="103,104",season=current_year)
+        url_standings = f"https://statsapi.mlb.com/api/v1/standings?leagueId=103%2C104&season={current_year}"
+        res = requests.get(url_standings)
+        res.raise_for_status()
+        mlb_standings = res.json()
+        
         mlb_teams = mlb.get_teams(sport_id=1)
-
+       
         mlb_leagues_standings = {
             'american_league': [], 
             'national_league': []
         }
 
         for team in mlb_teams: 
-            
             league_name = team.league.name
             league_id = team.league.id
             division_name = team.division.name
@@ -426,33 +429,33 @@ def get_standings(response: Response):
                 "season": team.season,
             }
 
-            for div in mlb_standings:
-                if div.division.id == division_id:
-                    for t in div.teamrecords:
-                        if team.id == t.team.id:
-                            filtered_team["league_rank"] = t.leaguerank
-                            filtered_team["conferenceGamesBack"] = t.leaguegamesback
-                            filtered_team["wins"] = t.leaguerecord["wins"]
-                            filtered_team["losses"] = t.leaguerecord["losses"]
-                            filtered_team["winpct"] = t.leaguerecord["pct"]
-                            filtered_team["ties"] = t.leaguerecord["ties"]
-                            filtered_team["currentStreak"] = t.streak.streakcode
+            for conference in mlb_standings.get("records", []):
+                if conference.get("division",{})["id"] == division_id:
+                    for t in conference.get("teamRecords", []):
+                        if team.id == t.get("team")["id"]:
+                            filtered_team["league_rank"] = t.get("leagueRank")
+                            filtered_team["conferenceGamesBack"] = t.get("leagueGamesBack")
+                            filtered_team["wins"] = t.get("leagueRecord")["wins"]
+                            filtered_team["losses"] = t.get("leagueRecord")["losses"]
+                            filtered_team["winpct"] = t.get("leagueRecord")["pct"]
+                            filtered_team["ties"] = t.get("leagueRecord")["ties"]
+                            filtered_team["currentStreak"] = t.get("streak")["streakCode"]
                             
-                            for lr in t.records["leaguerecords"]:
+                            for lr in t.get("records",{})["leagueRecords"]:
                                 if lr["league"]["id"] == 103:
-                                    filtered_team["americanLeagueRecord"] = f"{lr["wins"]}-{lr["losses"]}"
+                                    filtered_team["americanLeagueRecord"] = f"{lr['wins']}-{lr['losses']}"
                                 if lr["league"]["id"] ==  104:
-                                    filtered_team["nationalLeagueRecord"] = f"{lr["wins"]}-{lr["losses"]}"
+                                    filtered_team["nationalLeagueRecord"] = f"{lr['wins']}-{lr['losses']}"
 
-                            for ovr in t.records["overallrecords"]:
+                            for ovr in t.get("records",{})["overallRecords"]:
                                 if ovr["type"] == "home":
-                                    filtered_team["home"] = f"{ovr["wins"]}-{ovr["losses"]}"
+                                    filtered_team["home"] = f"{ovr['wins']}-{ovr['losses']}"
                                 elif ovr["type"] == "away":
-                                    filtered_team["road"] = f"{ovr["wins"]}-{ovr["losses"]}"
+                                    filtered_team["road"] = f"{ovr['wins']}-{ovr['losses']}"
 
-                            for sr in t.records["splitrecords"]:
+                            for sr in t.get("records",{})["splitRecords"]:
                                 if sr["type"] == "lastTen":
-                                    filtered_team["lastTen"] = f"{sr["wins"]}-{sr["losses"]}"
+                                    filtered_team["lastTen"] = f"{sr['wins']}-{sr['losses']}"
 
             if league_name == 'American League':
                 mlb_leagues_standings["american_league"].append(filtered_team)
@@ -471,12 +474,34 @@ def get_standings(response: Response):
             "data": mlb_leagues_standings
         }
 
+    except HTTPError as err_http:
+        response.status_code = err_http.response.status_code if err_http.response.status_code in range(400, 500) else 502
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"External API Error ({err_http.response.status_code}): {err_http}"
+        }
+    except ConnectionError as err_conn:
+        response.status_code = 504
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Connection Error: {err_conn}"
+        }
+    
     except TheMlbStatsApiException as err:
         response.status_code = 502
         return {
             "ok": False,
             "data": None,
             "error": str(err)
+        }
+    except Exception as err:
+        response.status_code = 500
+        return {
+            "ok": False,
+            "data": None,
+            "error": f"Internal Server Error: {str(err)}"
         }
     
 @app.get('/api/MLB/players')
@@ -612,7 +637,7 @@ FOOTBALL_DATA_APIKEY = os.getenv("FOOTBALL_DATA_APIKEY")
 @app.get('/api/SOCCER/schedules')
 def get_schedules(response: Response):
     # don't cache response for failed requests
-    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+    response.headers["Cache-Control"] = 'no-cache, no-store, must-revalidate'
 
     try:
         current_year = datetime.now().year
@@ -699,7 +724,7 @@ def get_schedules(response: Response):
 @app.get('/api/SOCCER/standings')
 def get_standings(response: Response):
     # don't cache response for failed requests
-    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+    response.headers["Cache-Control"] = 'no-cache, no-store, must-revalidate'
 
     try:
         current_year = datetime.now().year
@@ -776,7 +801,7 @@ def get_standings(response: Response):
 @app.get('/api/SOCCER/players')
 def get_players(response: Response):
     # don't cache response for failed requests
-    response.headers["Cache-Control"] = 'no-cache, no-stote, must-revalidate'
+    response.headers["Cache-Control"] = 'no-cache, no-store, must-revalidate'
 
     try:
         current_year=datetime.now().year
